@@ -1,0 +1,53 @@
+{
+  "entities": {
+    "StockItem": {
+      "title": "Stock Item",
+      "description": "A product available in the store",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "promoPrice": { "type": "number" }
+      },
+      "required": ["id", "name", "price"]
+    },
+    "MonthlyReport": {
+      "title": "Monthly Report",
+      "description": "Sales data for a specific month",
+      "type": "object",
+      "properties": {
+        "storeName": { "type": "string" },
+        "month": { "type": "string" },
+        "days": { "type": "object" }
+      },
+      "required": ["storeName", "month", "days"]
+    },
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User information and role",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] }
+      },
+      "required": ["uid", "email", "role"]
+    }
+  },
+  "firestore": {
+    "/stock": {
+      "schema": "StockItem",
+      "description": "Global stock list"
+    },
+    "/reports/{reportId}": {
+      "schema": "MonthlyReport",
+      "description": "Monthly sales reports"
+    },
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profiles"
+    }
+  }
+}
