@@ -117,8 +117,8 @@ export function AppContent() {
   const [analysisEndDate, setAnalysisEndDate] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
 
   // Login State
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('BagatelleShop');
+  const [password, setPassword] = useState('Pass@11');
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -1410,9 +1410,9 @@ export function AppContent() {
         let currentPrice = Number(data.price) || 0;
         let currentPromo = data.promoPrice !== undefined && data.promoPrice !== null ? Number(data.promoPrice) : undefined;
 
-        // If price is 0 or price/promo was swapped from previous incorrect import, correct it using official pricelist
+        // Update items to match the newly updated official pricelist
         if (atMatch) {
-          if (currentPrice === 0 || (currentPrice < atMatch.price && currentPromo === atMatch.price)) {
+          if (currentPrice !== atMatch.price || currentPromo !== atMatch.promoPrice) {
             currentPrice = atMatch.price;
             currentPromo = atMatch.promoPrice;
             const itemRef = doc(db, 'stock', docSnap.id);
@@ -1816,7 +1816,7 @@ export function AppContent() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Loader2 size={40} className="text-blue-600 animate-spin" />
-          <p className="text-gray-500 font-medium">Loading American Tourister Bagatelle...</p>
+          <p className="text-gray-500 font-medium">Loading AT KIOSK BAGA...</p>
         </div>
       </div>
     );
@@ -1832,8 +1832,8 @@ export function AppContent() {
         >
           <div className="text-center mb-10">
             <div className="w-20 h-20 bg-blue-600 rounded-2xl flex items-center justify-center text-white font-bold text-3xl mx-auto mb-6 shadow-lg shadow-blue-200">AT</div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">American Tourister</h1>
-            <p className="text-gray-500">Bagatelle • Sales & Stock Manager</p>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">AT KIOSK BAGA</h1>
+            <p className="text-gray-500">Sales & Stock Manager</p>
           </div>
           
           <form onSubmit={handleLogin} className="space-y-6">
@@ -1918,8 +1918,8 @@ export function AppContent() {
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-xs">AT</div>
                 <div className="hidden sm:block">
-                  <h1 className="font-bold text-gray-900 leading-tight text-sm">American Tourister</h1>
-                  <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Bagatelle</p>
+                  <h1 className="font-bold text-gray-900 leading-tight text-sm">AT KIOSK BAGA</h1>
+                  <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Sales & Stock Manager</p>
                 </div>
               </div>
 
