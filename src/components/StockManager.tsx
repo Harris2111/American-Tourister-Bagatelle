@@ -27,7 +27,7 @@ export const StockManager: React.FC<StockManagerProps> = ({ stock, movements, on
     highlighted: false
   });
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValues, setEditValues] = useState<Partial<StockItem>>({});
+  const [editValues, setEditValues] = useState<Record<string, any>>({});
   const [showAddForm, setShowAddForm] = useState(false);
   const [verifySearch, setVerifySearch] = useState('');
   const [isVerifyOpen, setIsVerifyOpen] = useState(false);
@@ -62,31 +62,35 @@ export const StockManager: React.FC<StockManagerProps> = ({ stock, movements, on
   });
 
   const toggleHighlight = (item: StockItem) => {
-    const updatedStock = stock.map(s => 
+    const updatedStock = displayStock.map(s => 
       s.id === item.id ? { ...s, highlighted: !s.highlighted } : s
     );
-    onUpdate(updatedStock, 'manual_update', `Toggled highlight for ${item.name}`);
+    onUpdate(updatedStock, 'manual_update', `Toggled highlight for ${item.name || item.model}`);
   };
 
   const addItem = () => {
     if (!newItem.model || !newItem.price) return;
     const name = newItem.description ? `${newItem.model} - ${newItem.description}` : newItem.model;
     const id = `item_${newItem.model.trim().replace(/[^a-zA-Z0-9]/g, '_')}`;
+    const cleanPrice = parseFloat(newItem.price.replace(/[^0-9.]/g, '')) || 0;
     const item: any = {
       id,
       name,
-      price: parseFloat(newItem.price.replace(/[^0-9.]/g, '')),
+      price: cleanPrice,
       description: newItem.description || '',
       model: newItem.model,
-      currentStock: parseInt(newItem.currentStock.replace(/[^0-9]/g, '')) || 0,
+      currentStock: parseInt(newItem.currentStock.replace(/[^0-9-]/g, '')) || 0,
       highlighted: newItem.highlighted
     };
 
     if (newItem.promoPrice) {
-      item.promoPrice = parseFloat(newItem.promoPrice.replace(/[^0-9.]/g, ''));
+      const cleanPromo = parseFloat(newItem.promoPrice.replace(/[^0-9.]/g, ''));
+      if (!isNaN(cleanPromo) && cleanPromo > 0) {
+        item.promoPrice = cleanPromo;
+      }
     }
 
-    onUpdate([...stock, item as StockItem]);
+    onUpdate([...stock, item as StockItem], 'manual_update', `Added new product ${item.model}`);
     setNewItem({ 
       name: '', 
       price: '', 
@@ -131,28 +135,70 @@ export const StockManager: React.FC<StockManagerProps> = ({ stock, movements, on
 
   const startEditing = (item: StockItem) => {
     setEditingId(item.id);
-    setEditValues(item);
+    setEditValues({
+      ...item,
+      model: item.model || '',
+      description: item.description || '',
+      price: item.price !== undefined && item.price !== null ? String(item.price) : '0',
+      promoPrice: item.promoPrice !== undefined && item.promoPrice !== null ? String(item.promoPrice) : '',
+      currentStock: item.currentStock !== undefined && item.currentStock !== null ? String(item.currentStock) : '0',
+      highlighted: item.highlighted || false
+    });
   };
 
   const saveEdit = () => {
     if (!editingId) return;
     
-    const oldItem = stock.find(i => i.id === editingId);
-    const newStockQty = editValues.currentStock ?? oldItem?.currentStock ?? 0;
+    const oldItem = displayStock.find(i => i.id === editingId) || stock.find(i => i.id === editingId);
+    const parsedStockQty = editValues.currentStock !== undefined && editValues.currentStock !== null && String(editValues.currentStock).trim() !== '' ? parseInt(String(editValues.currentStock), 10) : (oldItem?.currentStock ?? 0);
+    const newStockQty = !isNaN(parsedStockQty) ? parsedStockQty : (oldItem?.currentStock ?? 0);
     
     const performUpdate = (reason: string) => {
-      const updatedStock = stock.map(item => {
+      const updatedStock = displayStock.map((item) => {
         if (item.id === editingId) {
-          const updated = { ...item, ...editValues } as any;
-          if (updated.promoPrice === undefined || updated.promoPrice === null || isNaN(updated.promoPrice)) {
-            delete updated.promoPrice;
+          const updated = { ...item } as StockItem;
+          
+          const newModel = editValues.model !== undefined && String(editValues.model).trim() !== '' ? String(editValues.model).trim() : item.model;
+          updated.model = newModel;
+          
+          const cleanDesc = (editValues.description !== undefined && editValues.description !== 'Product') ? String(editValues.description).trim() : item.description;
+          updated.description = cleanDesc;
+          
+          if (updated.model) {
+            updated.name = cleanDesc ? `${updated.model} - ${cleanDesc}` : updated.model;
           }
-          return updated as StockItem;
+          
+          const cleanPriceStr = String(editValues.price !== undefined ? editValues.price : item.price).replace(/[^0-9.]/g, '');
+          const parsedPrice = parseFloat(cleanPriceStr);
+          updated.price = !isNaN(parsedPrice) && parsedPrice >= 0 ? parsedPrice : item.price;
+          
+          updated.currentStock = newStockQty;
+          updated.highlighted = editValues.highlighted !== undefined ? editValues.highlighted : item.highlighted;
+          
+          // Promo price logic
+          if (editValues.promoPrice !== undefined && editValues.promoPrice !== null) {
+            const rawPromoStr = String(editValues.promoPrice).trim();
+            if (rawPromoStr === '' || rawPromoStr === '0') {
+              delete (updated as any).promoPrice;
+            } else {
+              const cleanPromoStr = rawPromoStr.replace(/[^0-9.]/g, '');
+              const parsedPromo = parseFloat(cleanPromoStr);
+              if (!isNaN(parsedPromo) && parsedPromo > 0) {
+                updated.promoPrice = parsedPromo;
+              } else {
+                delete (updated as any).promoPrice;
+              }
+            }
+          } else {
+            delete (updated as any).promoPrice;
+          }
+
+          return updated;
         }
         return item;
       });
       
-      onUpdate(updatedStock, 'manual_update', reason);
+      onUpdate(updatedStock, 'manual_update', reason || 'Manual edit');
       setEditingId(null);
       setReasonModal(prev => ({ ...prev, isOpen: false }));
     };
@@ -166,7 +212,7 @@ export const StockManager: React.FC<StockManagerProps> = ({ stock, movements, on
         onConfirm: performUpdate
       });
     } else {
-      performUpdate('');
+      performUpdate('Manual edit');
     }
   };
 
@@ -846,7 +892,7 @@ export const StockManager: React.FC<StockManagerProps> = ({ stock, movements, on
   };
 
   // Process stock to handle legacy data or missing fields
-  const displayStock = stock.map(item => {
+  const displayStock = stock.map((item, idx) => {
     // If model/description are missing, try to extract from name
     let model = item.model;
     let description = item.description;
@@ -862,9 +908,11 @@ export const StockManager: React.FC<StockManagerProps> = ({ stock, movements, on
     }
 
     const cleanDescription = (description && description !== 'Product') ? description : '';
+    const itemId = item.id || (model ? `item_${model.trim().replace(/[^a-zA-Z0-9]/g, '_')}` : `item_idx_${idx}`);
 
     return {
       ...item,
+      id: itemId,
       model: model || '',
       description: cleanDescription,
       price: item.price || 0,
@@ -1108,8 +1156,8 @@ export const StockManager: React.FC<StockManagerProps> = ({ stock, movements, on
               Please update their prices manually.
             </p>
             <div className="flex flex-wrap gap-2 mt-3">
-              {itemsWithPriceOne.slice(0, 5).map(item => (
-                <span key={item.id} className="px-2 py-1 bg-white border border-amber-200 rounded text-[10px] font-bold text-amber-800">
+              {itemsWithPriceOne.slice(0, 5).map((item, idx) => (
+                <span key={item.id ? `p1-${item.id}` : `p1-idx-${idx}`} className="px-2 py-1 bg-white border border-amber-200 rounded text-[10px] font-bold text-amber-800">
                   {item.model}
                 </span>
               ))}
@@ -1162,7 +1210,7 @@ export const StockManager: React.FC<StockManagerProps> = ({ stock, movements, on
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {transferSummary.updated.map((item, idx) => (
-                          <tr key={idx} className="hover:bg-white transition-colors">
+                          <tr key={item.model ? `trans-upd-${item.model}` : `trans-upd-idx-${idx}`} className="hover:bg-white transition-colors">
                             <td className="px-4 py-2 font-medium text-gray-800">{item.model}</td>
                             <td className="px-4 py-2 text-right text-green-600 font-bold">+{item.added}</td>
                             <td className="px-4 py-2 text-right font-bold">{item.newTotal}</td>
@@ -1191,7 +1239,7 @@ export const StockManager: React.FC<StockManagerProps> = ({ stock, movements, on
                       </thead>
                       <tbody className="divide-y divide-purple-100">
                         {transferSummary.new.map((item, idx) => (
-                          <tr key={idx} className="hover:bg-white transition-colors">
+                          <tr key={item.model ? `trans-new-${item.model}` : `trans-new-idx-${idx}`} className="hover:bg-white transition-colors">
                             <td className="px-4 py-2 font-medium text-gray-800">{item.model}</td>
                             <td className="px-4 py-2 text-right font-bold">{item.quantity}</td>
                             <td className="px-4 py-2 text-right text-amber-600 font-bold">Rs 1</td>
@@ -1217,22 +1265,37 @@ export const StockManager: React.FC<StockManagerProps> = ({ stock, movements, on
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        {/* Quick Verify Searchable Dropdown */}
+        {/* Search & Stock Filter */}
         <div className="relative">
-          <label className="text-xs font-bold text-gray-400 uppercase ml-1 mb-2 block">Quick Stock Verification</label>
+          <label className="text-xs font-bold text-gray-400 uppercase ml-1 mb-2 block">Search Stock Table</label>
           <div className="relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <input 
               type="text"
-              placeholder="Search product to verify stock..."
-              className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
-              value={verifySearch}
+              placeholder="Type model code or description to filter table..."
+              className="w-full pl-12 pr-10 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm text-sm"
+              value={searchTerm || verifySearch}
               onChange={(e) => {
-                setVerifySearch(e.target.value);
+                const val = e.target.value;
+                setSearchTerm(val);
+                setVerifySearch(val);
                 setIsVerifyOpen(true);
               }}
               onFocus={() => setIsVerifyOpen(true)}
             />
+            {(searchTerm || verifySearch) && (
+              <button 
+                onClick={() => {
+                  setSearchTerm('');
+                  setVerifySearch('');
+                  setIsVerifyOpen(false);
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                title="Clear search"
+              >
+                <X size={16} />
+              </button>
+            )}
           </div>
 
           {isVerifyOpen && verifySearch && (
@@ -1240,27 +1303,60 @@ export const StockManager: React.FC<StockManagerProps> = ({ stock, movements, on
               {displayStock.filter(s => 
                 (s.model || '').toLowerCase().includes(verifySearch.toLowerCase()) || 
                 (s.description || '').toLowerCase().includes(verifySearch.toLowerCase())
-              ).map(item => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setSearchTerm(item.model);
-                    setVerifySearch('');
-                    setIsVerifyOpen(false);
-                  }}
-                  className="w-full flex items-center justify-between p-4 hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0 text-left"
+              ).map((item, idx) => (
+                <div
+                  key={item.id ? `srch-${item.id}` : `srch-idx-${idx}`}
+                  className="w-full flex items-center justify-between p-4 hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0 text-left group"
                 >
-                  <div>
-                    <p className="font-bold text-gray-900">{item.model}</p>
+                  <button
+                    onClick={() => {
+                      setSearchTerm(item.model);
+                      setVerifySearch('');
+                      setIsVerifyOpen(false);
+                    }}
+                    className="flex-1 text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      <p className="font-bold text-gray-900">{item.model}</p>
+                      {item.promoPrice && item.promoPrice > 0 ? (
+                        <span className="px-2 py-0.5 bg-green-100 text-green-700 font-bold text-[10px] rounded-md">
+                          PROMO
+                        </span>
+                      ) : null}
+                    </div>
                     <p className="text-xs text-gray-500">{item.description}</p>
+                  </button>
+                  <div className="text-right flex items-center gap-3">
+                    <div>
+                      <p className={`text-sm font-bold ${item.currentStock < 3 ? 'text-red-500' : 'text-green-600'}`}>
+                        {item.currentStock} in stock
+                      </p>
+                      <div className="flex items-center gap-1.5 justify-end">
+                        {item.promoPrice && item.promoPrice > 0 ? (
+                          <>
+                            <span className="text-[10px] text-gray-400 line-through font-mono">{item.price.toLocaleString()} MUR</span>
+                            <span className="text-[11px] text-green-600 font-bold font-mono">{item.promoPrice.toLocaleString()} MUR</span>
+                          </>
+                        ) : (
+                          <span className="text-[10px] text-gray-400 font-mono">{item.price.toLocaleString()} MUR</span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSearchTerm(item.model);
+                        setVerifySearch('');
+                        setIsVerifyOpen(false);
+                        startEditing(item);
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-all shadow-sm"
+                      title="Edit price or promo price"
+                    >
+                      <Edit2 size={13} />
+                      Edit
+                    </button>
                   </div>
-                  <div className="text-right">
-                    <p className={`text-sm font-bold ${item.currentStock < 3 ? 'text-red-500' : 'text-green-600'}`}>
-                      {item.currentStock} in stock
-                    </p>
-                    <p className="text-[10px] text-gray-400 font-mono">{item.price.toLocaleString()} MUR</p>
-                  </div>
-                </button>
+                </div>
               ))}
               {displayStock.filter(s => 
                 (s.model || '').toLowerCase().includes(verifySearch.toLowerCase()) || 
@@ -1351,7 +1447,8 @@ export const StockManager: React.FC<StockManagerProps> = ({ stock, movements, on
           <div className="space-y-1">
             <label className="text-xs font-bold text-gray-400 uppercase ml-1">Price (MUR)</label>
             <input
-              type="number"
+              type="text"
+              inputMode="decimal"
               placeholder="0.00"
               className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white font-mono"
               value={newItem.price}
@@ -1361,9 +1458,10 @@ export const StockManager: React.FC<StockManagerProps> = ({ stock, movements, on
           <div className="space-y-1">
             <label className="text-xs font-bold text-gray-400 uppercase ml-1">Promo Price (Optional)</label>
             <input
-              type="number"
+              type="text"
+              inputMode="decimal"
               placeholder="0.00"
-              className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white font-mono text-blue-600"
+              className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white font-mono text-green-600 font-bold"
               value={newItem.promoPrice}
               onChange={e => setNewItem({ ...newItem, promoPrice: e.target.value })}
             />
@@ -1419,14 +1517,26 @@ export const StockManager: React.FC<StockManagerProps> = ({ stock, movements, on
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {filteredStock.map(item => (
-              <tr key={item.id} className={`hover:bg-gray-50/50 transition-colors ${item.highlighted ? 'bg-green-50/50' : ''}`}>
+            {filteredStock.map((item, idx) => (
+              <tr 
+                key={item.id ? `stk-${item.id}` : `stk-idx-${idx}`} 
+                onDoubleClick={() => {
+                  if (editingId !== item.id) {
+                    startEditing(item);
+                  }
+                }}
+                className={`hover:bg-gray-50/50 transition-colors ${item.highlighted ? 'bg-green-50/50' : ''}`}
+              >
                 <td className="px-6 py-4">
                   {editingId === item.id ? (
                     <input 
-                      className="border rounded px-2 py-1 w-full text-sm"
-                      value={editValues.model}
-                      onChange={e => setEditValues({ ...editValues, model: e.target.value })}
+                      className="border rounded px-2 py-1 w-full text-sm font-bold"
+                      value={editValues.model ?? ''}
+                      onChange={e => setEditValues(prev => ({ ...prev, model: e.target.value }))}
+                      onKeyDown={e => { 
+                        if (e.key === 'Enter') saveEdit(); 
+                        if (e.key === 'Escape') setEditingId(null);
+                      }}
                     />
                   ) : (
                     <span className="text-sm font-medium text-gray-800">{item.model}</span>
@@ -1436,41 +1546,93 @@ export const StockManager: React.FC<StockManagerProps> = ({ stock, movements, on
                   {editingId === item.id ? (
                     <input 
                       className="border rounded px-2 py-1 w-full text-sm"
-                      value={editValues.description}
-                      onChange={e => setEditValues({ ...editValues, description: e.target.value })}
+                      value={editValues.description ?? ''}
+                      onChange={e => setEditValues(prev => ({ ...prev, description: e.target.value }))}
+                      onKeyDown={e => { 
+                        if (e.key === 'Enter') saveEdit(); 
+                        if (e.key === 'Escape') setEditingId(null);
+                      }}
                     />
                   ) : (
                     <span className="text-sm text-gray-600">{item.description}</span>
                   )}
                 </td>
-                <td className="px-6 py-4 font-mono text-blue-600 font-bold text-sm">
+                <td 
+                  className={`px-6 py-4 font-mono text-blue-600 font-bold text-sm ${editingId !== item.id ? 'cursor-pointer hover:bg-blue-50/50 rounded transition-colors' : ''}`}
+                  onClick={() => {
+                    if (editingId !== item.id) startEditing(item);
+                  }}
+                  title={editingId !== item.id ? 'Click to edit price' : ''}
+                >
                   {editingId === item.id ? (
                     <input 
-                      type="number"
-                      className="border rounded px-2 py-1 w-full text-sm"
-                      value={editValues.price}
-                      onChange={e => setEditValues({ ...editValues, price: parseFloat(e.target.value) || 0 })}
+                      type="text"
+                      inputMode="decimal"
+                      className="border rounded px-2 py-1 w-full text-sm font-bold"
+                      value={editValues.price ?? ''}
+                      onChange={e => setEditValues(prev => ({ ...prev, price: e.target.value }))}
+                      onKeyDown={e => { 
+                        if (e.key === 'Enter') saveEdit(); 
+                        if (e.key === 'Escape') setEditingId(null);
+                      }}
                     />
                   ) : `${item.price.toLocaleString()} MUR`}
                 </td>
-                <td className="px-6 py-4 font-mono text-green-600 font-bold text-sm">
+                <td 
+                  className={`px-6 py-4 font-mono text-green-600 font-bold text-sm ${editingId !== item.id ? 'cursor-pointer hover:bg-green-50/50 rounded transition-colors group/promo' : ''}`}
+                  onClick={() => {
+                    if (editingId !== item.id) startEditing(item);
+                  }}
+                  title={editingId !== item.id ? 'Click to set or edit promo price' : ''}
+                >
                   {editingId === item.id ? (
-                    <input 
-                      type="number"
-                      placeholder="None"
-                      className="border rounded px-2 py-1 w-full text-sm"
-                      value={editValues.promoPrice || ''}
-                      onChange={e => setEditValues({ ...editValues, promoPrice: e.target.value ? parseFloat(e.target.value) : undefined })}
-                    />
-                  ) : (item.promoPrice ? `${item.promoPrice.toLocaleString()} MUR` : '-')}
+                    <div className="flex items-center gap-1">
+                      <input 
+                        type="text"
+                        inputMode="decimal"
+                        autoFocus
+                        placeholder="Promo Price (e.g. 1500)"
+                        className="border-2 border-green-500 rounded-lg px-2 py-1 w-full text-sm font-bold text-green-700 bg-green-50/30 focus:ring-2 focus:ring-green-500 outline-none shadow-sm"
+                        value={editValues.promoPrice ?? ''}
+                        onChange={e => setEditValues(prev => ({ ...prev, promoPrice: e.target.value }))}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            saveEdit();
+                          }
+                          if (e.key === 'Escape') {
+                            setEditingId(null);
+                          }
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    item.promoPrice && item.promoPrice > 0 ? (
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-green-600 font-bold font-mono">{item.promoPrice.toLocaleString()} MUR</span>
+                          <Edit2 size={12} className="text-green-500 opacity-0 group-hover/promo:opacity-100 transition-opacity" />
+                        </div>
+                        <span className="text-[10px] text-gray-400 line-through font-mono">{item.price.toLocaleString()} MUR</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 text-gray-400">
+                        <span className="text-xs italic font-sans">-</span>
+                        <span className="opacity-0 group-hover/promo:opacity-100 text-[10px] bg-green-100 text-green-700 font-bold px-1.5 py-0.5 rounded transition-opacity flex items-center gap-1">
+                          <Edit2 size={10} /> + Promo
+                        </span>
+                      </div>
+                    )
+                  )}
                 </td>
                 <td className="px-6 py-4">
                   {editingId === item.id ? (
                     <input 
                       type="number"
-                      className="border rounded px-2 py-1 w-full text-sm"
-                      value={editValues.currentStock}
-                      onChange={e => setEditValues({ ...editValues, currentStock: parseInt(e.target.value) || 0 })}
+                      className="border rounded px-2 py-1 w-full text-sm font-bold"
+                      value={editValues.currentStock ?? ''}
+                      onChange={e => setEditValues(prev => ({ ...prev, currentStock: e.target.value }))}
+                      onKeyDown={e => { if (e.key === 'Enter') saveEdit(); }}
                     />
                   ) : (
                     <span className={`font-bold text-sm ${item.currentStock < 3 ? 'text-red-500' : 'text-gray-800'}`}>
@@ -1485,7 +1647,7 @@ export const StockManager: React.FC<StockManagerProps> = ({ stock, movements, on
                         type="checkbox"
                         className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
                         checked={editValues.highlighted || false}
-                        onChange={e => setEditValues({ ...editValues, highlighted: e.target.checked })}
+                        onChange={e => setEditValues(prev => ({ ...prev, highlighted: e.target.checked }))}
                       />
                       <span className="text-xs text-gray-500">Highlight</span>
                     </div>
@@ -1712,7 +1874,7 @@ export const StockManager: React.FC<StockManagerProps> = ({ stock, movements, on
                   return (
                     <div className="relative border-l-2 border-gray-100 ml-3 pl-6 space-y-8">
                       {itemMovements.map((m, idx) => (
-                        <div key={m.id} className="relative">
+                        <div key={m.id ? `mov-${m.id}` : `mov-idx-${idx}`} className="relative">
                           <div className={`absolute -left-[31px] top-0 w-4 h-4 rounded-full border-2 border-white shadow-sm ${
                             m.type === 'sale' ? 'bg-red-500' : 
                             m.type === 'csv_upload' ? 'bg-blue-500' : 

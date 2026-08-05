@@ -311,7 +311,7 @@ export const SalesByProductAnalysis: React.FC<SalesByProductAnalysisProps> = ({
             <tbody>
               {salesData.length > 0 ? (
                 salesData.map((product, idx) => (
-                  <tr key={product.productId} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                  <tr key={product.productId ? `sbp-${product.productId}` : `sbp-idx-${idx}`} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500 font-bold text-xs">

@@ -143,8 +143,8 @@ export const FinancialReport: React.FC<FinancialReportProps> = ({ allReports }) 
           // Add formulas
           excelRow.getCell('F').value = { formula: `SUM(D${rowNum}:E${rowNum})` }; // Total Sales
           excelRow.getCell('L').value = { formula: `SUM(G${rowNum}:K${rowNum})` }; // Total
-          excelRow.getCell('P').value = { formula: `L${rowNum}*0.15` }; // VAT Amount
-          excelRow.getCell('Q').value = { formula: `L${rowNum}-P${rowNum}` }; // Total without VAT
+          excelRow.getCell('Q').value = { formula: `L${rowNum}/1.15` }; // Total without VAT
+          excelRow.getCell('P').value = { formula: `L${rowNum}-Q${rowNum}` }; // VAT Amount (15% VAT extracted from inclusive total)
           
           const todayStr = format(new Date(), 'yyyy-MM-dd');
           if (dateStr < todayStr) {

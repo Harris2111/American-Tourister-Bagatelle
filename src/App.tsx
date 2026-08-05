@@ -1407,21 +1407,8 @@ export function AppContent() {
         const displayName = cleanDescription ? `${model} - ${cleanDescription}` : model;
 
         const atMatch = model ? atMap.get(model.toLowerCase()) : undefined;
-        let currentPrice = Number(data.price) || 0;
-        let currentPromo = data.promoPrice !== undefined && data.promoPrice !== null ? Number(data.promoPrice) : undefined;
-
-        // Update items to match the newly updated official pricelist
-        if (atMatch) {
-          if (currentPrice !== atMatch.price || currentPromo !== atMatch.promoPrice) {
-            currentPrice = atMatch.price;
-            currentPromo = atMatch.promoPrice;
-            const itemRef = doc(db, 'stock', docSnap.id);
-            updateDoc(itemRef, { 
-              price: currentPrice, 
-              promoPrice: currentPromo ?? deleteField() 
-            }).catch(err => console.error("Error auto-correcting price:", err));
-          }
-        }
+        let currentPrice = (data.price !== undefined && data.price !== null && !isNaN(Number(data.price))) ? Number(data.price) : (atMatch ? atMatch.price : 0);
+        let currentPromo = (data.promoPrice !== undefined && data.promoPrice !== null && !isNaN(Number(data.promoPrice)) && Number(data.promoPrice) > 0) ? Number(data.promoPrice) : undefined;
 
         stockData.push({
           ...data,
@@ -1663,6 +1650,9 @@ export function AppContent() {
   const updateStock = async (newStock: StockItem[], type: StockMovement['type'] = 'manual_update', reason?: string) => {
     if (!user) return;
     
+    // Update local state immediately so UI updates instantly without lagging or snapping back
+    setStock(newStock);
+
     try {
       console.log(`[DEBUG] Starting stock sync for ${newStock.length} items (type: ${type})...`);
       
@@ -1671,7 +1661,6 @@ export function AppContent() {
       const newIds = new Set(newStock.map(s => s.id));
       
       // Delete items that are no longer in the list - ONLY if it's a full sync or explicitly requested
-      // For CSV uploads, we typically WANT to keep existing items that aren't in the CSV
       const toDelete = (type === 'initial' || type === 'manual_update') ? currentIds.filter(id => !newIds.has(id)) : [];
       if (toDelete.length > 0) {
         console.log(`[DEBUG] Deleting ${toDelete.length} stale items...`);
@@ -1691,49 +1680,57 @@ export function AppContent() {
         console.log(`[DEBUG] Batch deletion of ${chunk.length} items committed.`);
       }
 
-      // Process updates/creates in batches
-      console.log(`[DEBUG] Updating/Creating ${newStock.length} items...`);
-      const movementPromises: Promise<void>[] = [];
-
-      // Filter newStock to ONLY those items that are different from stock
-      // This saves a huge amount of Firestore writes (preventing quota exceeded errors)
-      const changedOrNewItems = newStock.filter(newItem => {
+      // Commit items that actually changed or were newly added
+      const itemsToSync = newStock.filter(newItem => {
         const existingItem = stock.find(s => s.id === newItem.id);
-        if (!existingItem) return true; // It's new
-        // Compare stringified versions for a deep equality check (skipping functions/prototypes)
-        return JSON.stringify(existingItem) !== JSON.stringify(newItem);
+        if (!existingItem) return true;
+        const oldPromo = (existingItem.promoPrice !== undefined && existingItem.promoPrice !== null && !isNaN(Number(existingItem.promoPrice)) && Number(existingItem.promoPrice) > 0) ? Number(existingItem.promoPrice) : undefined;
+        const newPromo = (newItem.promoPrice !== undefined && newItem.promoPrice !== null && !isNaN(Number(newItem.promoPrice)) && Number(newItem.promoPrice) > 0) ? Number(newItem.promoPrice) : undefined;
+        return (
+          existingItem.price !== newItem.price ||
+          oldPromo !== newPromo ||
+          existingItem.currentStock !== newItem.currentStock ||
+          existingItem.model !== newItem.model ||
+          existingItem.description !== newItem.description ||
+          existingItem.name !== newItem.name ||
+          existingItem.highlighted !== newItem.highlighted
+        );
       });
 
-      console.log(`[DEBUG] Found ${changedOrNewItems.length} items that actually changed.`);
+      console.log(`[DEBUG] Processing ${itemsToSync.length} items to update in Firestore (type: ${type}).`);
 
-      for (let i = 0; i < changedOrNewItems.length; i += CHUNK_SIZE) {
+      const movementPromises: Promise<void>[] = [];
+
+      for (let i = 0; i < itemsToSync.length; i += CHUNK_SIZE) {
         const batch = writeBatch(db);
-        const chunk = changedOrNewItems.slice(i, i + CHUNK_SIZE);
+        const chunk = itemsToSync.slice(i, i + CHUNK_SIZE);
         chunk.forEach(item => {
           const oldItem = stock.find(s => s.id === item.id);
           
-          let cleanItem: any;
+          let cleanItem: any = { ...item };
+          
           if (type === 'manual_update') {
-            // For manual updates, we trust the incoming item completely since it was edited by the user
-            cleanItem = { ...item };
-            
-            // Explicitly delete fields that might be undefined so they are removed from Firestore
-            if (cleanItem.promoPrice === undefined) {
+            // Explicitly delete promoPrice field if undefined or non-positive
+            if (cleanItem.promoPrice === undefined || cleanItem.promoPrice === null || isNaN(Number(cleanItem.promoPrice)) || Number(cleanItem.promoPrice) <= 0) {
               cleanItem.promoPrice = deleteField();
+            } else {
+              cleanItem.promoPrice = Number(cleanItem.promoPrice);
             }
           } else {
             // For CSV or Transfer Note updates, only overwrite an existing field if the new item actually has meaningful data
-            cleanItem = oldItem ? { 
-              ...oldItem, 
-              ...item,
-              price: (item.price > 0) ? item.price : oldItem.price,
-              promoPrice: (item.promoPrice && item.promoPrice > 0) ? item.promoPrice : oldItem.promoPrice,
-              description: (item.description && item.description.trim().length > 0) ? item.description : oldItem.description,
-              name: (item.name && !item.name.includes(' - ') && oldItem.name.includes(' - ')) ? oldItem.name : item.name
-            } : { ...item };
+            if (oldItem) {
+              cleanItem = { 
+                ...oldItem, 
+                ...item,
+                price: (item.price > 0) ? item.price : oldItem.price,
+                promoPrice: (item.promoPrice && item.promoPrice > 0) ? item.promoPrice : oldItem.promoPrice,
+                description: (item.description && item.description.trim().length > 0) ? item.description : oldItem.description,
+                name: (item.name && !item.name.includes(' - ') && oldItem.name.includes(' - ')) ? oldItem.name : item.name
+              };
+            }
           }
           
-          // Ensure no undefined values (deleteField() is handled properly by setDoc with merge or without)
+          // Ensure no undefined values remain (deleteField() is preserved for Firestore setDoc merge)
           Object.keys(cleanItem).forEach(key => {
             if (cleanItem[key] === undefined) {
               delete cleanItem[key];
@@ -1769,7 +1766,7 @@ export function AppContent() {
           batch.set(doc(db, 'stock', item.id), cleanItem, { merge: true });
         });
         await batch.commit();
-        console.log(`[DEBUG] Batch update of ${chunk.length} items committed.`);
+        console.log(`[DEBUG] Batch update of ${chunk.length} items committed to Firestore.`);
       }
       
       // Wait for all movements to be logged

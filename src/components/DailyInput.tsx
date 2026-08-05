@@ -463,8 +463,8 @@ export const DailyInput: React.FC<DailyInputProps> = ({
         </div>
 
         <div className="max-h-[300px] overflow-y-auto border rounded-lg divide-y bg-white">
-            {filteredStock.map(item => (
-              <div key={item.id} className={`p-3 hover:bg-blue-50 transition-colors group border-b last:border-0 ${item.highlighted ? 'bg-green-50/50' : ''}`}>
+            {filteredStock.map((item, idx) => (
+              <div key={item.id ? `di-${item.id}` : `di-idx-${idx}`} className={`p-3 hover:bg-blue-50 transition-colors group border-b last:border-0 ${item.highlighted ? 'bg-green-50/50' : ''}`}>
                 <div className="font-bold text-gray-800 text-sm mb-2 break-words">
                   {item.name}
                 </div>
@@ -558,7 +558,7 @@ export const DailyInput: React.FC<DailyInputProps> = ({
               const vatAmount = totalIncl - totalExcl;
               
               return (
-                <div key={sale.id} className={`flex flex-col text-xs p-3 rounded-xl group border transition-all ${
+                <div key={sale.id || `sale-${idx}`} className={`flex flex-col text-xs p-3 rounded-xl group border transition-all ${
                   sale.highlighted 
                     ? 'bg-green-50 border-green-200 hover:border-green-300' 
                     : 'bg-gray-50 border-gray-100 hover:border-blue-200'
@@ -598,7 +598,7 @@ export const DailyInput: React.FC<DailyInputProps> = ({
                           </span>
                         ) : sale.paymentMethod === 'split' ? (
                           sale.splitPayments?.map((split, sIdx) => (
-                            <span key={sIdx} className={`px-1.5 py-0.5 rounded uppercase font-bold text-[8px] flex items-center gap-1 ${
+                            <span key={`split-${sale.id || idx}-${sIdx}`} className={`px-1.5 py-0.5 rounded uppercase font-bold text-[8px] flex items-center gap-1 ${
                               split.method === 'cash' ? 'bg-green-100 text-green-700' :
                               split.method === 'card' ? 'bg-blue-100 text-blue-700' :
                               'bg-purple-100 text-purple-700'

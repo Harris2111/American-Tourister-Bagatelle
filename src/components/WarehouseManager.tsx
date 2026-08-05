@@ -243,8 +243,8 @@ export const WarehouseManager: React.FC<WarehouseManagerProps> = ({ shopStock, o
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {comparisonResults.map(item => (
-                  <tr key={item.itemCode} className="hover:bg-gray-50/50 transition-colors">
+                {comparisonResults.map((item, idx) => (
+                  <tr key={item.itemCode ? `wh-${item.itemCode}` : `wh-idx-${idx}`} className="hover:bg-gray-50/50 transition-colors">
                     <td className="px-6 py-4 font-medium text-gray-800">{item.itemCode}</td>
                     <td className="px-6 py-4 text-center font-bold text-amber-600">{item.warehouseQty}</td>
                     <td className="px-6 py-4 text-center font-bold text-blue-600">{item.shopQty}</td>

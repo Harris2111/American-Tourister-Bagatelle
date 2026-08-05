@@ -53,7 +53,7 @@ export const ExcelTable: React.FC<ExcelTableProps> = ({
     const upt = transactions > 0 ? (quantities / transactions) : 0;
     const aur = quantities > 0 ? (totalIncl / quantities) : 0;
     
-    const productsSold = sales.map(s => {
+    const productsSold = sales.map((s, idx) => {
       const qty = s.quantity || 1;
       const price = s.price || 0;
       const payment = s.paymentMethod || 'cash';
@@ -67,7 +67,7 @@ export const ExcelTable: React.FC<ExcelTableProps> = ({
       }
       
       return (
-        <div key={s.id} className={cn("mb-1 last:mb-0 px-1 rounded", s.highlighted ? "bg-green-100" : "")}>
+        <div key={s.id || `sale-${idx}`} className={cn("mb-1 last:mb-0 px-1 rounded", s.highlighted ? "bg-green-100" : "")}>
           • {s.productName} ({price.toLocaleString()} MUR) (x{qty}) 
           {showPaymentDetails && (
             <span className="font-bold text-red-600 ml-1">
@@ -207,7 +207,7 @@ export const ExcelTable: React.FC<ExcelTableProps> = ({
         </thead>
         <tbody>
           {tableRows.map((row, idx) => (
-            <tr key={idx} className={cn(row.totalIncl > 0 ? "bg-white" : "bg-gray-50")}>
+            <tr key={`excel-row-${row.date || idx}`} className={cn(row.totalIncl > 0 ? "bg-white" : "bg-gray-50")}>
               <td className="border border-black py-2">{row.date}</td>
               <td className="border border-black py-2">{row.day}</td>
               {showVat ? (
